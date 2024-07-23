@@ -1,0 +1,69 @@
+package rcvdemo;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import java.io.IOException;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.time.LocalTime;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+	public class myTimerLoggings {
+	    private static final Logger logger = LogManager.getLogger(myTimerLoggings.class);
+	    private static final Path LOG_DIR = Paths.get("logs");
+
+	    public static void main(String[] args) {
+	        ScheduledExecutorService executorService = Executors.newScheduledThreadPool(4);
+
+	        
+	        executorService.scheduleAtFixedRate(() -> logger.debug("Current time: " + LocalTime.now()), 0, 1, TimeUnit.SECONDS);
+
+	        executorService.scheduleAtFixedRate(() -> logger.info("Current time: " + LocalTime.now().withSecond(0)), 0, 1, TimeUnit.MINUTES);
+
+	       
+	        executorService.scheduleAtFixedRate(() -> logger.error("Current time: " + LocalTime.now().withMinute(0).withSecond(0)), 0, 1, TimeUnit.HOURS);
+
+	        
+	        executorService.scheduleAtFixedRate(() -> {
+	            try {
+	                Files.walkFileTree(LOG_DIR, new SimpleFileVisitor<Path>() {
+	                    @Override
+	                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+	                        if (Files.isRegularFile(file) && file.toString().endsWith(".log")) {
+	                            if (Files.getLastModifiedTime(file).toMillis() < System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)) {
+	                                Files.delete(file);
+	                                logger.info("Deleted old log file: " + file);
+	                            }
+	                        }
+	                        return FileVisitResult.CONTINUE;
+	                    }
+	                });
+	            } catch (IOException e) {
+	                logger.error("Error cleaning up log files", e);
+	            }
+	        }, 0, 1, TimeUnit.DAYS); // Her gün bu görevi çalıştır
+
+	        // Programı belirli bir süre sonra sonlandırma
+	        new Thread(() -> {
+	            try {
+	                TimeUnit.MINUTES.sleep(1); // 1 dakika bekleyin
+	            } catch (InterruptedException e) {
+	                Thread.currentThread().interrupt();
+	            } finally {
+	                logger.info("Shutting down the logger");
+	                executorService.shutdown();
+	                try {
+	                    if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
+	                        executorService.shutdownNow();
+	                    }
+	                } catch (InterruptedException e) {
+	                    executorService.shutdownNow();
+	                }
+	            }
+	        }).start();
+	    }
+	}
+
+
+
